@@ -66,19 +66,15 @@ def build_bundle(out_dir=None):
         ug.create_dataset("frame_times_ot", data=np.asarray(d2ot(fts), float))
         ug.create_dataset("motion_t_ot", data=np.asarray(d2ot(fts[:m]), float))
         ug.create_dataset("motion_proxy", data=mot[:m])
-        # DLC-tracked tissue motion + the raw tracked points, if available (preferred)
-        if os.path.exists(pp.DLC_TRACKED_H5):
-            import pandas as pd
-            trk = analysis.us_tracked_motion()
-            mt = min(len(trk), len(fts))
-            ug.create_dataset("motion_tracked", data=trk[:mt])
-            ug.attrs["motion_primary"] = "tracked"
-            df = pd.read_hdf(pp.DLC_TRACKED_H5)
-            sc = df.columns.get_level_values(0)[0]
+        # final tracked tissue: the inter-point DISTANCE (the US metric) + the raw points
+        if os.path.exists(pp.TRACK_JSON):
+            dist = analysis.us_distance()
+            mt = min(len(dist), len(fts))
+            ug.create_dataset("distance", data=dist[:mt])     # px, point0<->point1 (deformation)
+            ug.attrs["motion_primary"] = "distance"
             tg = ug.create_group("track")
-            for bp in dict.fromkeys(df.columns.get_level_values("bodyparts")):
-                tg.create_dataset(bp, data=np.column_stack(
-                    [df[(sc, bp, "x")].to_numpy(float), df[(sc, bp, "y")].to_numpy(float)]))
+            for name, xy in pp.tracked_points().items():
+                tg.create_dataset(f"point{name}", data=xy)
         else:
             ug.attrs["motion_primary"] = "proxy"
 

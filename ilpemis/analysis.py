@@ -55,31 +55,20 @@ def us_motion_energy(mp4=None, roi_depth=US_ROI_DEPTH, cache=True):
     return mot
 
 
-def us_tracked_motion(dlc_h5=None, smooth=3):
-    """Per-frame tracked tissue speed (px/frame) from the DLC output: mean over bodyparts
-    of the frame-to-frame displacement magnitude. Length == n frames == n c-spikes."""
-    import pandas as pd
-    dlc_h5 = dlc_h5 or pp.DLC_TRACKED_H5
-    df = pd.read_hdf(dlc_h5)
-    sc = df.columns.get_level_values(0)[0]
-    bps = list(dict.fromkeys(df.columns.get_level_values("bodyparts")))
-    speeds = []
-    for bp in bps:
-        x = df[(sc, bp, "x")].to_numpy(float)
-        y = df[(sc, bp, "y")].to_numpy(float)
-        sp = np.r_[0.0, np.hypot(np.diff(x), np.diff(y))]
-        speeds.append(sp)
-    v = np.mean(speeds, axis=0)
-    if smooth and smooth > 1:                         # light moving-average to tame px jitter
-        k = np.ones(smooth) / smooth
-        v = np.convolve(v, k, mode="same")
-    v = np.clip(v, 0, np.nanpercentile(v, 99))        # tame occasional DLC tracking jumps
-    return v
+def us_distance(track_json=None, smooth=3):
+    """Inter-point **distance** (px) per frame -- the ultrasound metric (tissue deformation),
+    from the final DUSTrack tracking (DLC-corrected + LK-RSTC). Length == n frames == n c-spikes."""
+    pts = pp.tracked_points(track_json or pp.TRACK_JSON)
+    p0, p1 = list(pts.values())[:2]
+    d = np.hypot(p1[:, 0] - p0[:, 0], p1[:, 1] - p0[:, 1])
+    if smooth and smooth > 1:
+        d = np.convolve(d, np.ones(smooth) / smooth, mode="same")
+    return d
 
 
 def _signals(out_dir=None, us_source="auto"):
-    """Assemble the three OT-clock signals for the reveal: flexor EMG, US motion, hand speed.
-    ``us_source`` 'tracked' (DLC) / 'proxy' (frame-diff) / 'auto' (tracked if available)."""
+    """Assemble the three OT-clock signals for the reveal: flexor EMG, US metric, hand speed.
+    ``us_source`` 'tracked' (inter-point distance) / 'proxy' (frame-diff) / 'auto'."""
     r = pp.run(out_dir or pp.WORKDIR)
     d2ot = r["d2ot"]
     flex = r["emg_envelopes"]["RForearmFlexors"]
@@ -88,9 +77,9 @@ def _signals(out_dir=None, us_source="auto"):
     ee_t, ee_v = np.asarray(d2ot(ext.t)), np.asarray(ext()).ravel()
     ht, hv = r["hand"]
     if us_source == "auto":
-        us_source = "tracked" if os.path.exists(pp.DLC_TRACKED_H5) else "proxy"
+        us_source = "tracked" if os.path.exists(pp.TRACK_JSON) else "proxy"
     if us_source == "tracked":
-        usv, us_label = us_tracked_motion(), "US tissue motion\n(DLC tracked, px/frame)"
+        usv, us_label = us_distance(), "US tissue distance\n(px, point0↔point1)"
     else:
         usv, us_label = us_motion_energy(), "US tissue motion\n(ROI frame-diff)"
     fts = np.asarray(r["us_frame_times_delsys"])
@@ -171,7 +160,8 @@ def condition_metrics(out_dir=None):
         ee = float(np.nanmean(s["ext"][1][_mask(s["ext"][0], w)]))
         hm = _mask(s["hand"][0], w)
         hv = float(np.nanmean(s["hand"][1][hm]))
-        us = float(np.nanmean(s["us"][1][_mask(s["us"][0], w)]))
+        usm = _mask(s["us"][0], w)
+        us = float(np.nanstd(s["us"][1][usm]))          # deformation amplitude (std of inter-point distance, px)
         sf = _cadence(s["hand"][0][hm], s["hand"][1][hm])
         out[k] = dict(flex=fe, ext=ee, cci=min(fe, ee) / max(fe, ee), hand=hv, us=us, stroke=sf)
     return out, s
@@ -182,7 +172,7 @@ def contrasts(out_dir=None):
     Normal-vs-Tensed: EMG amplitude + co-contraction. Normal-vs-Fast: speed + cadence."""
     m, _ = condition_metrics(out_dir)
     conds = list(m)
-    print(f"{'cond':8s} {'flexEMG':>9} {'extEMG':>9} {'CCI':>6} {'handSpd':>9} {'USmot':>7} {'spd pk/s':>10}")
+    print(f"{'cond':8s} {'flexEMG':>9} {'extEMG':>9} {'CCI':>6} {'handSpd':>9} {'USdef':>7} {'spd pk/s':>10}")
     for k in conds:
         d = m[k]
         print(f"{k:8s} {d['flex']:9.4f} {d['ext']:9.4f} {d['cci']:6.2f} {d['hand']:9.1f} {d['us']:7.2f} {d['stroke']:10.2f}")

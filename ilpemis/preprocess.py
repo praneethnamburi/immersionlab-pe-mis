@@ -55,11 +55,13 @@ TRIAL_TIMES = os.path.join(ROOT, "trial_times.txt")
 WORKDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "_out"))
 COMFREE_DIR = os.path.join(WORKDIR, "comfree")
 
-#: DLC tracked forearm-tissue output (Praneeth's project; consumed by analysis.us_tracked_motion).
-#: 2 points (point0 ~ stable reference, point1 ~ moving tissue), 19366 frames == n c-spikes.
-DLC_TRACKED_H5 = os.path.join(
-    ROOT, "telemed", "table_wiping-pn-2026-06-26", "videos", "iteration-1",
-    "20260626 141416 PE course table wipingDLC_Resnet50_table_wipingJun26shuffle1_snapshot_320.h5")
+#: Final DUSTrack tracking (DLC-corrected + LK moving-average filtered, the LK-RSTC
+#: output). Two forearm-tissue points; the **inter-point distance** is the ultrasound
+#: metric (tissue deformation). 19366 frames == n c-spikes (1:1). JSON shape:
+#: ``{point: {frame_idx: [x, y]}}`` with points "0" and "1".
+TRACK_JSON = os.path.join(
+    ROOT, "telemed",
+    "20260626 141416 PE course table wiping_annotations_dlccorr_lkmovavg_0.500.json")
 
 #: analog sync sub-channel indices in delsys.Log.analog.split_to_1d()
 CH_OT_GATE = 0          # A
@@ -181,6 +183,23 @@ def comfree_mp4(comfree_dir=COMFREE_DIR):
     if not hits:
         raise FileNotFoundError(f"no comfree mp4 in {comfree_dir}; run extract_us_comfree()")
     return hits[0]
+
+
+def tracked_points(track_json=TRACK_JSON):
+    """Final tracked tissue points -> ``{name: (n_frames, 2)}`` xy arrays, frame-ordered.
+
+    Source = the DUSTrack ``..._dlccorr_lkmovavg_*.json`` (DLC correction + LK-RSTC filter).
+    JSON shape ``{point: {frame_idx: [x, y]}}``; any missing frame is NaN."""
+    import json
+    with open(track_json) as f:
+        d = json.load(f)
+    out = {}
+    for name, frames in d.items():
+        a = np.full((len(frames), 2), np.nan)
+        for k, xy in frames.items():
+            a[int(k)] = xy
+        out[name] = a
+    return out
 
 
 # ----------------------------------------------------------------------------- orchestration

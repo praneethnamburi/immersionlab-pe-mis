@@ -35,8 +35,8 @@ One continuous trial, one right-handed subject; four task segments —
   sensor (Ch13): **A = OT recording gate**, **B = Telemed FrameOutput** (inverted:
   idles high, drops low while recording, one c-spike up per US frame), C/D unused.
 - **Telemed** ultrasound — transverse forearm, LF9-5N60 probe, 9 MHz, 50 mm depth,
-  native 128 × 884, ~133 fps, 19,367 frames (matches the piano-study probe config,
-  so the existing DLC model applies).
+  native 128 × 884, ~133 fps, 19,367 frames. Tissue is tracked with DUSTrack (two
+  points; DLC + LK-RSTC); the **inter-point distance** is the US deformation metric.
 - **ATEM** multicam montage (4K) + CAM 4 audio.
 
 ## Time model
@@ -71,8 +71,9 @@ pp.extract_us_comfree()             # COM-free .tvd → native-grid mp4 + timing
 - [x] ATEM task-condition snippets (motion-template anchored) + de-hummed audio.
 - [x] EMG→US→motion reveal (proxy) + condition-contrast figures (`figures/`).
 - [x] Portable bundle exporter + Day-1 Colab teaching notebook (`notebooks/`).
-- [x] DUSTrack tissue tracking consumed (DLC, 2 points @ ~0.97 likelihood); reveal +
-      contrasts + bundle now use tracked tissue motion (frame-diff proxy retained as fallback).
+- [x] Final DUSTrack tracking (DLC-corrected + LK-RSTC, `..._dlccorr_lkmovavg_0.500.json`)
+      consumed; the **inter-point distance** (point0↔point1) is the ultrasound metric
+      (tissue deformation). Reveal + contrasts + bundle use it (frame-diff proxy = fallback).
 - [ ] Day-2 DUSTrack-workflow notebook; trim + host the take-home bundle (Drive/HF).
 
 ## Modules
