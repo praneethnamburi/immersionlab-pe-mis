@@ -23,11 +23,15 @@ from . import preprocess as pp
 US_ROI_DEPTH = (100, 800)        # native depth rows (active=884); skip near-probe + far field
 
 
-def us_motion_energy(mp4=None, roi_depth=US_ROI_DEPTH):
+def us_motion_energy(mp4=None, roi_depth=US_ROI_DEPTH, cache=True):
     """Per-frame tissue-motion proxy: mean |frame_i - frame_{i-1}| over a depth ROI.
 
     Returns an array of length (n_frames - 1) -- one value per inter-frame interval,
-    aligning naturally with the FrameOutput c-spikes (also one per frame)."""
+    aligning naturally with the FrameOutput c-spikes (also one per frame). Cached to
+    ``WORKDIR/us_motion.npy`` (decoding the 1.5 GB native mp4 is the slow step)."""
+    cache_path = os.path.join(pp.WORKDIR, "us_motion.npy")
+    if cache and os.path.exists(cache_path):
+        return np.load(cache_path)
     import cv2
     mp4 = mp4 or pp.comfree_mp4()
     cap = cv2.VideoCapture(mp4)
@@ -44,7 +48,11 @@ def us_motion_energy(mp4=None, roi_depth=US_ROI_DEPTH):
             mot.append(float(np.mean(np.abs(g - prev))))
         prev = g
     cap.release()
-    return np.asarray(mot)
+    mot = np.asarray(mot)
+    if cache:
+        os.makedirs(pp.WORKDIR, exist_ok=True)
+        np.save(cache_path, mot)
+    return mot
 
 
 def _signals(out_dir=None):
@@ -100,5 +108,86 @@ def reveal(out_dir=None, zoom=(14.0, 19.0)):
     return p1, p2
 
 
+def _mask(t, win):
+    t = np.asarray(t)
+    return (t >= win[0]) & (t <= win[1])
+
+
+def _cadence(t, v):
+    """Wiping cadence as hand-speed peaks per second (robust on short windows; each
+    half-stroke gives one speed peak, so this scales with stroke rate)."""
+    from scipy.signal import find_peaks
+    t = np.asarray(t, float); v = np.asarray(v, float)
+    if len(v) < 8:
+        return float("nan")
+    sr = 1.0 / float(np.median(np.diff(t)))
+    pk, _ = find_peaks(v, distance=int(sr * 0.15), prominence=0.3 * np.std(v))
+    return len(pk) / (t[-1] - t[0])
+
+
+def condition_metrics(out_dir=None):
+    """Per-condition means: flexor/extensor EMG, co-contraction index, US motion,
+    hand speed, and stroke cadence. Returns ``{condition: {...}}``."""
+    s = _signals(out_dir)
+    conds = [c for c in ("Normal", "Tensed", "Fast") if c in s["trials_ot"]]
+    out = {}
+    for k in conds:
+        w = s["trials_ot"][k]
+        fe = float(np.nanmean(s["flex"][1][_mask(s["flex"][0], w)]))
+        ee = float(np.nanmean(s["ext"][1][_mask(s["ext"][0], w)]))
+        hm = _mask(s["hand"][0], w)
+        hv = float(np.nanmean(s["hand"][1][hm]))
+        us = float(np.nanmean(s["us"][1][_mask(s["us"][0], w)]))
+        sf = _cadence(s["hand"][0][hm], s["hand"][1][hm])
+        out[k] = dict(flex=fe, ext=ee, cci=min(fe, ee) / max(fe, ee), hand=hv, us=us, stroke=sf)
+    return out, s
+
+
+def contrasts(out_dir=None):
+    """Teaching figure for the two contrasts + a printed stats table.
+    Normal-vs-Tensed: EMG amplitude + co-contraction. Normal-vs-Fast: speed + cadence."""
+    m, _ = condition_metrics(out_dir)
+    conds = list(m)
+    print(f"{'cond':8s} {'flexEMG':>9} {'extEMG':>9} {'CCI':>6} {'handSpd':>9} {'USmot':>7} {'spd pk/s':>10}")
+    for k in conds:
+        d = m[k]
+        print(f"{k:8s} {d['flex']:9.4f} {d['ext']:9.4f} {d['cci']:6.2f} {d['hand']:9.1f} {d['us']:7.2f} {d['stroke']:10.2f}")
+    if "Normal" in m and "Tensed" in m:
+        print(f"\nNormal->Tensed: flexor EMG x{m['Tensed']['flex']/m['Normal']['flex']:.2f}, "
+              f"extensor x{m['Tensed']['ext']/m['Normal']['ext']:.2f} (co-contraction; CCI "
+              f"{m['Normal']['cci']:.2f}->{m['Tensed']['cci']:.2f})")
+    if "Normal" in m and "Fast" in m:
+        print(f"Normal->Fast: hand speed x{m['Fast']['hand']/m['Normal']['hand']:.2f}, "
+              f"speed-peak rate {m['Normal']['stroke']:.2f}->{m['Fast']['stroke']:.2f} /s")
+
+    figdir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
+    os.makedirs(figdir, exist_ok=True)
+    cc = {"Normal": "#3a7d44", "Tensed": "#b03a3a", "Fast": "#2f6f9f"}
+    x = np.arange(len(conds))
+    fig, ax = plt.subplots(1, 3, figsize=(15, 4.5))
+    # A: EMG flexor/extensor grouped -> co-contraction in Tensed
+    ax[0].bar(x - 0.18, [m[k]["flex"] for k in conds], 0.36, label="flexor", color="#b03a3a")
+    ax[0].bar(x + 0.18, [m[k]["ext"] for k in conds], 0.36, label="extensor", color="#2f6f9f")
+    ax[0].set_xticks(x); ax[0].set_xticklabels(conds); ax[0].set_ylabel("EMG RMS (mV)")
+    ax[0].set_title("EMG amplitude (Normal vs Tensed = co-contraction)"); ax[0].legend()
+    # B: hand speed
+    ax[1].bar(x, [m[k]["hand"] for k in conds], 0.6, color=[cc[k] for k in conds])
+    ax[1].set_xticks(x); ax[1].set_xticklabels(conds); ax[1].set_ylabel("mean hand speed (mm/s)")
+    ax[1].set_title("hand speed (Normal vs Fast)")
+    # C: stroke cadence
+    ax[2].bar(x, [m[k]["stroke"] for k in conds], 0.6, color=[cc[k] for k in conds])
+    ax[2].set_xticks(x); ax[2].set_xticklabels(conds); ax[2].set_ylabel("hand-speed peaks / s")
+    ax[2].set_title("wiping cadence (Normal vs Fast)")
+    for a in ax:
+        a.grid(alpha=0.2, axis="y")
+    fig.suptitle("table_wiping condition contrasts", fontsize=13)
+    fig.tight_layout()
+    p = os.path.join(figdir, "contrasts.png")
+    fig.savefig(p, dpi=130); plt.close(fig)
+    print(f"\nsaved {p}")
+    return p
+
+
 if __name__ == "__main__":
     reveal()
+    contrasts()
