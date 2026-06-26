@@ -68,7 +68,17 @@ pp.extract_us_comfree()             # COM-free .tvd → native-grid mp4 + timing
 - [x] US per-frame c-spike timing (`detect_frame_pulses`) → OT clock.
 - [x] COM-free `.tvd` extraction (native mp4 + timing h5).
 - [x] ATEM CAM-4 audio de-hum (60 Hz + harmonics, −20…−41 dB).
-- [ ] ATEM task-condition snippet extraction (motion-template anchored).
-- [ ] DUSTrack inference with the piano-study model (DLC env, not `b4`).
-- [ ] EMG→US→motion cross-modal reveal figure.
-- [ ] Portable "bundle" exporter + Colab teaching notebooks.
+- [x] ATEM task-condition snippets (motion-template anchored) + de-hummed audio.
+- [x] EMG→US→motion reveal (proxy) + condition-contrast figures (`figures/`).
+- [x] Portable bundle exporter + Day-1 Colab teaching notebook (`notebooks/`).
+- [ ] DUSTrack tissue tracking (consume the piano-study DLC inference) → sharpen the
+      reveal + contrast US signal from frame-diff proxy to tracked tissue motion.
+- [ ] Day-2 DUSTrack-output notebook; trim + host the take-home bundle (Drive/HF).
+
+## Modules
+
+- `ilpemis/preprocess.py` — load + Delsys→OT sync + EMG envelopes + US c-spike timing + comfree extract.
+- `ilpemis/analysis.py` — US tissue-motion proxy, the EMG→US→motion reveal, condition contrasts.
+- `ilpemis/atem.py` — motion-template anchor, de-hum, per-condition clips.
+- `ilpemis/bundle.py` — `build_bundle` (b4) / `load_bundle` (Colab-light).
+- `notebooks/table_wiping_day1.ipynb` — Day-1 teaching notebook (reads the bundle; h5py only).

@@ -20,12 +20,13 @@ import json
 import os
 import numpy as np
 
-from . import preprocess as pp
-
 
 def build_bundle(out_dir=None):
-    """Write ``table_wiping.h5`` + ``manifest.json`` to ``out_dir`` (default WORKDIR/bundle)."""
+    """Write ``table_wiping.h5`` + ``manifest.json`` to ``out_dir`` (default WORKDIR/bundle).
+
+    Build-side (b4): lazily imports the lab stack via :mod:`ilpemis.preprocess`."""
     import h5py
+    from . import preprocess as pp
     from . import analysis
 
     out_dir = out_dir or os.path.join(pp.WORKDIR, "bundle")
