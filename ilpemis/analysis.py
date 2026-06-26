@@ -55,8 +55,31 @@ def us_motion_energy(mp4=None, roi_depth=US_ROI_DEPTH, cache=True):
     return mot
 
 
-def _signals(out_dir=None):
-    """Assemble the three OT-clock signals for the reveal: flexor EMG, US motion, hand speed."""
+def us_tracked_motion(dlc_h5=None, smooth=3):
+    """Per-frame tracked tissue speed (px/frame) from the DLC output: mean over bodyparts
+    of the frame-to-frame displacement magnitude. Length == n frames == n c-spikes."""
+    import pandas as pd
+    dlc_h5 = dlc_h5 or pp.DLC_TRACKED_H5
+    df = pd.read_hdf(dlc_h5)
+    sc = df.columns.get_level_values(0)[0]
+    bps = list(dict.fromkeys(df.columns.get_level_values("bodyparts")))
+    speeds = []
+    for bp in bps:
+        x = df[(sc, bp, "x")].to_numpy(float)
+        y = df[(sc, bp, "y")].to_numpy(float)
+        sp = np.r_[0.0, np.hypot(np.diff(x), np.diff(y))]
+        speeds.append(sp)
+    v = np.mean(speeds, axis=0)
+    if smooth and smooth > 1:                         # light moving-average to tame px jitter
+        k = np.ones(smooth) / smooth
+        v = np.convolve(v, k, mode="same")
+    v = np.clip(v, 0, np.nanpercentile(v, 99))        # tame occasional DLC tracking jumps
+    return v
+
+
+def _signals(out_dir=None, us_source="auto"):
+    """Assemble the three OT-clock signals for the reveal: flexor EMG, US motion, hand speed.
+    ``us_source`` 'tracked' (DLC) / 'proxy' (frame-diff) / 'auto' (tracked if available)."""
     r = pp.run(out_dir or pp.WORKDIR)
     d2ot = r["d2ot"]
     flex = r["emg_envelopes"]["RForearmFlexors"]
@@ -64,12 +87,17 @@ def _signals(out_dir=None):
     fe_t, fe_v = np.asarray(d2ot(flex.t)), np.asarray(flex()).ravel()
     ee_t, ee_v = np.asarray(d2ot(ext.t)), np.asarray(ext()).ravel()
     ht, hv = r["hand"]
-    mot = us_motion_energy()
+    if us_source == "auto":
+        us_source = "tracked" if os.path.exists(pp.DLC_TRACKED_H5) else "proxy"
+    if us_source == "tracked":
+        usv, us_label = us_tracked_motion(), "US tissue motion\n(DLC tracked, px/frame)"
+    else:
+        usv, us_label = us_motion_energy(), "US tissue motion\n(ROI frame-diff)"
     fts = np.asarray(r["us_frame_times_delsys"])
-    m = min(len(mot), len(fts))
-    us_t, us_v = np.asarray(d2ot(fts[:m])), mot[:m]
+    m = min(len(usv), len(fts))
+    us_t, us_v = np.asarray(d2ot(fts[:m])), usv[:m]
     return dict(r=r, flex=(fe_t, fe_v), ext=(ee_t, ee_v), us=(us_t, us_v),
-                hand=(ht, hv), trials_ot=r["trials_ot"])
+                hand=(ht, hv), trials_ot=r["trials_ot"], us_label=us_label, us_source=us_source)
 
 
 def reveal(out_dir=None, zoom=(14.0, 19.0)):
@@ -80,16 +108,22 @@ def reveal(out_dir=None, zoom=(14.0, 19.0)):
     os.makedirs(figdir, exist_ok=True)
     colors = {"Normal": "#3a7d44", "Tensed": "#b03a3a", "Slow": "#999", "Fast": "#2f6f9f"}
     rows = [("flexor EMG\nRMS (mV)", s["flex"], "#b03a3a"),
-            ("US tissue motion\n(ROI frame-diff)", s["us"], "#7a3fa0"),
+            (s["us_label"], s["us"], "#7a3fa0"),
             ("hand speed\nRIndex (mm/s)", s["hand"], "#333333")]
 
     def _draw(xlim, fname, title, shade):
         fig, ax = plt.subplots(3, 1, figsize=(14, 8), sharex=True)
         for a, (lbl, (t, v), c) in zip(ax, rows):
+            t, v = np.asarray(t), np.asarray(v)
             a.plot(t, v, color=c, lw=0.7)
             a.set_ylabel(lbl)
             a.grid(alpha=0.2)
             a.set_xlim(xlim)
+            win = (t >= xlim[0]) & (t <= xlim[1])      # scale y to the visible window
+            if win.any():
+                lo, hi = np.nanpercentile(v[win], [1, 99])
+                pad = 0.08 * (hi - lo + 1e-9)
+                a.set_ylim(lo - pad, hi + pad)
             if shade:
                 for k, (x0, x1) in s["trials_ot"].items():
                     a.axvspan(x0, x1, color=colors.get(k, "#ccc"), alpha=0.10)

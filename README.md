@@ -71,9 +71,9 @@ pp.extract_us_comfree()             # COM-free .tvd → native-grid mp4 + timing
 - [x] ATEM task-condition snippets (motion-template anchored) + de-hummed audio.
 - [x] EMG→US→motion reveal (proxy) + condition-contrast figures (`figures/`).
 - [x] Portable bundle exporter + Day-1 Colab teaching notebook (`notebooks/`).
-- [ ] DUSTrack tissue tracking (consume the piano-study DLC inference) → sharpen the
-      reveal + contrast US signal from frame-diff proxy to tracked tissue motion.
-- [ ] Day-2 DUSTrack-output notebook; trim + host the take-home bundle (Drive/HF).
+- [x] DUSTrack tissue tracking consumed (DLC, 2 points @ ~0.97 likelihood); reveal +
+      contrasts + bundle now use tracked tissue motion (frame-diff proxy retained as fallback).
+- [ ] Day-2 DUSTrack-workflow notebook; trim + host the take-home bundle (Drive/HF).
 
 ## Modules
 

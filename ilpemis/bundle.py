@@ -66,6 +66,21 @@ def build_bundle(out_dir=None):
         ug.create_dataset("frame_times_ot", data=np.asarray(d2ot(fts), float))
         ug.create_dataset("motion_t_ot", data=np.asarray(d2ot(fts[:m]), float))
         ug.create_dataset("motion_proxy", data=mot[:m])
+        # DLC-tracked tissue motion + the raw tracked points, if available (preferred)
+        if os.path.exists(pp.DLC_TRACKED_H5):
+            import pandas as pd
+            trk = analysis.us_tracked_motion()
+            mt = min(len(trk), len(fts))
+            ug.create_dataset("motion_tracked", data=trk[:mt])
+            ug.attrs["motion_primary"] = "tracked"
+            df = pd.read_hdf(pp.DLC_TRACKED_H5)
+            sc = df.columns.get_level_values(0)[0]
+            tg = ug.create_group("track")
+            for bp in dict.fromkeys(df.columns.get_level_values("bodyparts")):
+                tg.create_dataset(bp, data=np.column_stack(
+                    [df[(sc, bp, "x")].to_numpy(float), df[(sc, bp, "y")].to_numpy(float)]))
+        else:
+            ug.attrs["motion_primary"] = "proxy"
 
         sg = h.create_group("segments")
         for k, (a, b) in r["trials_ot"].items():

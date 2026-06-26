@@ -55,6 +55,12 @@ TRIAL_TIMES = os.path.join(ROOT, "trial_times.txt")
 WORKDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "_out"))
 COMFREE_DIR = os.path.join(WORKDIR, "comfree")
 
+#: DLC tracked forearm-tissue output (Praneeth's project; consumed by analysis.us_tracked_motion).
+#: 2 points (point0 ~ stable reference, point1 ~ moving tissue), 19366 frames == n c-spikes.
+DLC_TRACKED_H5 = os.path.join(
+    ROOT, "telemed", "table_wiping-pn-2026-06-26", "videos", "iteration-1",
+    "20260626 141416 PE course table wipingDLC_Resnet50_table_wipingJun26shuffle1_snapshot_320.h5")
+
 #: analog sync sub-channel indices in delsys.Log.analog.split_to_1d()
 CH_OT_GATE = 0          # A
 CH_TELEMED_FRAMES = 1   # B
