@@ -51,6 +51,10 @@ OT_CSV = os.path.join(ROOT, "ot", "table_wiping_001.csv")
 TVD = os.path.join(ROOT, "telemed", "20260626 141416 PE course table wiping.tvd")
 TRIAL_TIMES = os.path.join(ROOT, "trial_times.txt")
 
+#: local working dir for regenerable artifacts (gitignored)
+WORKDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "_out"))
+COMFREE_DIR = os.path.join(WORKDIR, "comfree")
+
 #: analog sync sub-channel indices in delsys.Log.analog.split_to_1d()
 CH_OT_GATE = 0          # A
 CH_TELEMED_FRAMES = 1   # B
@@ -160,8 +164,17 @@ def us_frame_times(delsys_log):
 def extract_us_comfree(tvd=TVD, out_dir=None):
     """COM-free ``.tvd`` -> native-grid mp4 (DLC-tracking-ready) + timing/metadata h5."""
     import telemed
-    out_dir = out_dir or os.path.join(os.path.dirname(tvd), "comfree")
+    out_dir = out_dir or COMFREE_DIR
     return telemed.extract_comfree(tvd, out_dir, progress=True)
+
+
+def comfree_mp4(comfree_dir=COMFREE_DIR):
+    """Path to the native-grid US mp4 produced by :func:`extract_us_comfree`."""
+    import glob
+    hits = sorted(glob.glob(os.path.join(comfree_dir, "*.mp4")))
+    if not hits:
+        raise FileNotFoundError(f"no comfree mp4 in {comfree_dir}; run extract_us_comfree()")
+    return hits[0]
 
 
 # ----------------------------------------------------------------------------- orchestration
