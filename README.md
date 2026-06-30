@@ -74,7 +74,9 @@ pp.extract_us_comfree()             # COM-free .tvd → native-grid mp4 + timing
 - [x] Final DUSTrack tracking (DLC-corrected + LK-RSTC, `..._dlccorr_lkmovavg_0.500.json`)
       consumed; the **inter-point distance** (point0↔point1) is the ultrasound metric
       (tissue deformation). Reveal + contrasts + bundle use it (frame-diff proxy = fallback).
-- [ ] Day-2 DUSTrack-workflow notebook; trim + host the take-home bundle (Drive/HF).
+- [x] Day-2 notebook (tracked points → tissue metric → design-your-own) + take-home
+      hosted on Hugging Face (`praneethnamburimit/immersionlab-pe-mis-table-wiping`);
+      the notebooks auto-download it in Colab.
 
 ## Modules
 
@@ -82,4 +84,5 @@ pp.extract_us_comfree()             # COM-free .tvd → native-grid mp4 + timing
 - `ilpemis/analysis.py` — US tissue-motion proxy, the EMG→US→motion reveal, condition contrasts.
 - `ilpemis/atem.py` — motion-template anchor, de-hum, per-condition clips.
 - `ilpemis/bundle.py` — `build_bundle` (b4) / `load_bundle` (Colab-light).
-- `notebooks/table_wiping_day1.ipynb` — Day-1 teaching notebook (reads the bundle; h5py only).
+- `notebooks/table_wiping_day1.ipynb` — Day-1 teaching notebook (capture → sync → reveal; h5py only).
+- `notebooks/table_wiping_day2.ipynb` — Day-2 notebook (tracked points → tissue metric → design-your-own).
